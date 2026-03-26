@@ -173,7 +173,6 @@
         max-height: 130px;
         overflow-y: auto;
       }
-      /* Estilo para o alerta temporário */
       .toast-alert {
         position: fixed;
         bottom: 20px;
@@ -206,26 +205,12 @@
       <div class="top-card">
         <h1>💧 Monitor Inteligente <small>ESP32 + HiveMQ</small></h1>
         <div class="sub">Controle de enchimento e análise de consumo</div>
-        <div
-          style="
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-wrap: wrap;
-          "
-        >
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
           <div class="connection-status">
             <span class="led" id="statusLed"></span>
             <span id="mqttStatusText">Desconectado</span>
           </div>
-          <div
-            style="
-              font-size: 12px;
-              background: #eef2ff;
-              padding: 4px 12px;
-              border-radius: 20px;
-            "
-          >
+          <div style="font-size: 12px; background: #eef2ff; padding: 4px 12px; border-radius: 20px;">
             📡 tópico: <strong>uepa/dupla1/water_level</strong>
           </div>
         </div>
@@ -245,16 +230,11 @@
         </div>
 
         <div class="buttons">
-          <button class="btn stop-btn" id="stopButton">
-            🛑 PARAR ENCHIMENTO
-          </button>
-          <button class="btn resume-btn" id="resumeButton">
-            ▶️ RETOMAR ENCHIMENTO
-          </button>
+          <button class="btn stop-btn" id="stopButton">🛑 PARAR ENCHIMENTO</button>
+          <button class="btn resume-btn" id="resumeButton">▶️ RETOMAR ENCHIMENTO</button>
         </div>
         <p style="font-size: 12px; text-align: center; margin-top: -5px">
-          ⚙️ Comandos: <code>{"command": "stop_fill"}</code> ou
-          <code>{"command": "resume_fill"}</code>
+          ⚙️ Comandos: <code>{"command": "stop_fill"}</code> ou <code>{"command": "resume_fill"}</code>
         </p>
       </div>
 
@@ -280,15 +260,13 @@
         </div>
       </div>
       <footer>
-        🔌 Broker HiveMQ Cloud (TLS) – Dados em tempo real | Bomba: 1.5 kW |
-        Tarifa: R$ 0,80/kWh
+        🔌 Broker HiveMQ Cloud (TLS) – Dados em tempo real | Bomba: 1.5 kW | Tarifa: R$ 0,80/kWh
       </footer>
     </div>
 
     <script>
       // ========== CONFIGURAÇÕES ==========
-      const MQTT_BROKER =
-        "wss://d075579b224c4899825f05c9f9a1ec5a.s1.eu.hivemq.cloud:8884/mqtt";
+      const MQTT_BROKER = "wss://d075579b224c4899825f05c9f9a1ec5a.s1.eu.hivemq.cloud:8884/mqtt";
       const MQTT_USER = "teste123";
       const MQTT_PASSWORD = "Eduardo123";
       const TOPIC_NIVEL = "uepa/dupla1/water_level";
@@ -307,24 +285,18 @@
       let isConnected = false;
       let lastTimestamp = Date.now();
       let lastFillingState = false;
-      let consumoAcumuladoDia = 0.0; // R$ acumulado nas últimas 24h (rolling)
-      let historicoConsumo = []; // { timestamp, valor }
-      let historicoNivel = []; // { timestamp, nivel }
-      const MAX_HISTORICO = 100; // pontos para gráficos
+      let consumoAcumuladoDia = 0.0;
+      let historicoConsumo = [];
+      let historicoNivel = [];
+      const MAX_HISTORICO = 100;
 
-      // Dados fixos para comparação mensal (valores em R$)
       let consumoMensal = {
         atual: 0.0,
         passado: 248.5,
         retrasado: 212.3,
       };
 
-      // Controle de alertas para evitar repetição
-      let ultimoAlerta = {
-        vazio: false,
-        meio: false,
-        cheio: false
-      };
+      let ultimoAlerta = { vazio: false, meio: false, cheio: false };
       let notificacaoPermitida = false;
 
       // ========== ELEMENTOS DOM ==========
@@ -342,133 +314,51 @@
       let costChart, monthlyChart, levelHistoryChart;
 
       function initCharts() {
-        // Gráfico de consumo (linha)
         const ctxCost = document.getElementById("costChart").getContext("2d");
         costChart = new Chart(ctxCost, {
           type: "line",
-          data: {
-            labels: [],
-            datasets: [
-              {
-                label: "Consumo Acumulado (R$)",
-                data: [],
-                borderColor: "#e53e3e",
-                backgroundColor: "rgba(229,62,62,0.1)",
-                fill: true,
-                tension: 0.3,
-              },
-            ],
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: true,
-            scales: {
-              y: { beginAtZero: true, title: { display: true, text: "R$" } },
-            },
-          },
+          data: { labels: [], datasets: [{ label: "Consumo Acumulado (R$)", data: [], borderColor: "#e53e3e", backgroundColor: "rgba(229,62,62,0.1)", fill: true, tension: 0.3 }] },
+          options: { responsive: true, maintainAspectRatio: true, scales: { y: { beginAtZero: true, title: { display: true, text: "R$" } } } }
         });
-        // Gráfico mensal (barras)
-        const ctxMonthly = document
-          .getElementById("monthlyChart")
-          .getContext("2d");
+        const ctxMonthly = document.getElementById("monthlyChart").getContext("2d");
         monthlyChart = new Chart(ctxMonthly, {
           type: "bar",
-          data: {
-            labels: ["Mês Atual", "Mês Passado", "Mês Retrasado"],
-            datasets: [
-              {
-                label: "Custo (R$)",
-                data: [0, consumoMensal.passado, consumoMensal.retrasado],
-                backgroundColor: ["#38a169", "#4299e1", "#ed8936"],
-              },
-            ],
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: true,
-            scales: {
-              y: { beginAtZero: true, title: { display: true, text: "R$" } },
-            },
-          },
+          data: { labels: ["Mês Atual", "Mês Passado", "Mês Retrasado"], datasets: [{ label: "Custo (R$)", data: [0, consumoMensal.passado, consumoMensal.retrasado], backgroundColor: ["#38a169", "#4299e1", "#ed8936"] }] },
+          options: { responsive: true, maintainAspectRatio: true, scales: { y: { beginAtZero: true, title: { display: true, text: "R$" } } } }
         });
-        // Gráfico de nível histórico (linha)
-        const ctxLevel = document
-          .getElementById("levelHistoryChart")
-          .getContext("2d");
+        const ctxLevel = document.getElementById("levelHistoryChart").getContext("2d");
         levelHistoryChart = new Chart(ctxLevel, {
           type: "line",
-          data: {
-            labels: [],
-            datasets: [
-              {
-                label: "Nível (L)",
-                data: [],
-                borderColor: "#3b82f6",
-                backgroundColor: "rgba(59,130,246,0.1)",
-                fill: true,
-                tension: 0.2,
-              },
-            ],
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: true,
-            scales: {
-              y: {
-                min: 0,
-                max: CAPACIDADE_MAX,
-                title: { display: true, text: "Litros" },
-              },
-            },
-          },
+          data: { labels: [], datasets: [{ label: "Nível (L)", data: [], borderColor: "#3b82f6", backgroundColor: "rgba(59,130,246,0.1)", fill: true, tension: 0.2 }] },
+          options: { responsive: true, maintainAspectRatio: true, scales: { y: { min: 0, max: CAPACIDADE_MAX, title: { display: true, text: "Litros" } } } }
         });
       }
 
-      // Atualiza os dados do gráfico mensal (reflete o consumo atual)
       function updateMonthlyChart() {
-        monthlyChart.data.datasets[0].data = [
-          consumoMensal.atual,
-          consumoMensal.passado,
-          consumoMensal.retrasado,
-        ];
+        monthlyChart.data.datasets[0].data = [consumoMensal.atual, consumoMensal.passado, consumoMensal.retrasado];
         monthlyChart.update();
       }
 
-      // Adiciona um ponto ao histórico de consumo (acumulado) e mantém apenas últimas 24h
       function addConsumoPoint(timestamp, valorAcumulado) {
         historicoConsumo.push({ timestamp, valor: valorAcumulado });
         const agora = Date.now();
-        historicoConsumo = historicoConsumo.filter(
-          (p) => agora - p.timestamp <= 24 * 3600 * 1000,
-        );
-        if (historicoConsumo.length > MAX_HISTORICO)
-          historicoConsumo = historicoConsumo.slice(-MAX_HISTORICO);
-        costChart.data.labels = historicoConsumo.map((p) =>
-          new Date(p.timestamp).toLocaleTimeString(),
-        );
-        costChart.data.datasets[0].data = historicoConsumo.map((p) => p.valor);
+        historicoConsumo = historicoConsumo.filter(p => agora - p.timestamp <= 24 * 3600 * 1000);
+        if (historicoConsumo.length > MAX_HISTORICO) historicoConsumo = historicoConsumo.slice(-MAX_HISTORICO);
+        costChart.data.labels = historicoConsumo.map(p => new Date(p.timestamp).toLocaleTimeString());
+        costChart.data.datasets[0].data = historicoConsumo.map(p => p.valor);
         costChart.update();
       }
 
-      // Adiciona um ponto ao histórico de nível (últimas 24h)
       function addNivelPoint(timestamp, nivel) {
         historicoNivel.push({ timestamp, nivel });
         const agora = Date.now();
-        historicoNivel = historicoNivel.filter(
-          (p) => agora - p.timestamp <= 24 * 3600 * 1000,
-        );
-        if (historicoNivel.length > MAX_HISTORICO)
-          historicoNivel = historicoNivel.slice(-MAX_HISTORICO);
-        levelHistoryChart.data.labels = historicoNivel.map((p) =>
-          new Date(p.timestamp).toLocaleTimeString(),
-        );
-        levelHistoryChart.data.datasets[0].data = historicoNivel.map(
-          (p) => p.nivel,
-        );
+        historicoNivel = historicoNivel.filter(p => agora - p.timestamp <= 24 * 3600 * 1000);
+        if (historicoNivel.length > MAX_HISTORICO) historicoNivel = historicoNivel.slice(-MAX_HISTORICO);
+        levelHistoryChart.data.labels = historicoNivel.map(p => new Date(p.timestamp).toLocaleTimeString());
+        levelHistoryChart.data.datasets[0].data = historicoNivel.map(p => p.nivel);
         levelHistoryChart.update();
       }
 
-      // Atualiza o consumo com base no tempo em que a bomba ficou ligada
       function updateConsumoPorTempo(agora, estavaEnchendo) {
         let custo = 0;
         if (estavaEnchendo) {
@@ -478,9 +368,7 @@
             custo = energia_kWh * TARIFA_KWH;
             consumoAcumuladoDia += custo;
             consumoMensal.atual += custo;
-            addLogMessage(
-              `⚡ Consumo: +R$ ${custo.toFixed(3)} (total dia: R$ ${consumoAcumuladoDia.toFixed(2)})`,
-            );
+            addLogMessage(`⚡ Consumo: +R$ ${custo.toFixed(3)} (total dia: R$ ${consumoAcumuladoDia.toFixed(2)})`);
           }
         }
         addConsumoPoint(agora, consumoAcumuladoDia);
@@ -490,91 +378,57 @@
       // ========== ALERTAS ==========
       function solicitarPermissaoNotificacao() {
         if ("Notification" in window && Notification.permission !== "granted" && Notification.permission !== "denied") {
-          Notification.requestPermission().then(perm => {
-            notificacaoPermitida = (perm === "granted");
-          });
+          Notification.requestPermission().then(perm => { notificacaoPermitida = (perm === "granted"); });
         } else if (Notification.permission === "granted") {
           notificacaoPermitida = true;
         }
       }
 
       function tocarSom() {
-        // Cria um beep curto usando Web Audio
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         const oscillator = audioCtx.createOscillator();
         const gain = audioCtx.createGain();
         oscillator.connect(gain);
         gain.connect(audioCtx.destination);
         oscillator.type = "sine";
-        oscillator.frequency.value = 880; // tom agudo
+        oscillator.frequency.value = 880;
         gain.gain.value = 0.2;
         oscillator.start();
         gain.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + 0.5);
         oscillator.stop(audioCtx.currentTime + 0.5);
-        // Nota: o AudioContext pode estar suspenso inicialmente; se não houver som, chamamos resume
         if (audioCtx.state === "suspended") audioCtx.resume();
       }
 
-      function mostrarAlerta(mensagem, tipo) {
-        // Toast temporário
+      function mostrarAlerta(mensagem) {
         const toast = document.createElement("div");
         toast.className = "toast-alert";
         toast.textContent = mensagem;
         document.body.appendChild(toast);
         setTimeout(() => toast.remove(), 5000);
-
-        // Notificação do navegador
         if (notificacaoPermitida) {
           new Notification("🚨 Alerta do Reservatório", { body: mensagem, icon: "https://cdn-icons-png.flaticon.com/512/190/190784.png" });
         }
-
-        // Som
         tocarSom();
-
-        // Log também
         addLogMessage(`⚠️ ALERTA: ${mensagem}`);
       }
 
       function verificarAlertaNivel(nivel) {
-        let alertaAtivado = false;
-        let mensagem = "";
-
-        // Verifica quase vazio (≤ LIMIAR_VAZIO)
         if (nivel <= LIMIAR_VAZIO && !ultimoAlerta.vazio) {
-          alertaAtivado = true;
-          mensagem = "🔻 Nível CRÍTICO! Reservatório quase vazio!";
-          ultimoAlerta.vazio = true;
-          ultimoAlerta.meio = false;   // reseta meio e cheio porque cruzou o limite
-          ultimoAlerta.cheio = false;
+          mostrarAlerta("🔻 Nível CRÍTICO! Reservatório quase vazio!");
+          ultimoAlerta = { vazio: true, meio: false, cheio: false };
+        } else if (nivel >= LIMIAR_METADE - 20 && nivel <= LIMIAR_METADE + 20 && !ultimoAlerta.meio && nivel > LIMIAR_VAZIO) {
+          mostrarAlerta("⚠️ Reservatório está na metade da capacidade!");
+          ultimoAlerta = { vazio: false, meio: true, cheio: false };
+        } else if (nivel >= LIMIAR_CHEIO && !ultimoAlerta.cheio) {
+          mostrarAlerta("💦 Reservatório CHEIO! Encerrando enchimento.");
+          ultimoAlerta = { vazio: false, meio: false, cheio: true };
         }
-        // Verifica meio cheio (entre LIMIAR_VAZIO+1 e LIMIAR_METADE? melhor usar um intervalo: 45%-55%)
-        else if (nivel >= LIMIAR_METADE - 20 && nivel <= LIMIAR_METADE + 20 && !ultimoAlerta.meio && nivel > LIMIAR_VAZIO) {
-          alertaAtivado = true;
-          mensagem = "⚠️ Reservatório está na metade da capacidade!";
-          ultimoAlerta.meio = true;
-          ultimoAlerta.vazio = false;
-          ultimoAlerta.cheio = false;
-        }
-        // Verifica cheio (≥ LIMIAR_CHEIO)
-        else if (nivel >= LIMIAR_CHEIO && !ultimoAlerta.cheio) {
-          alertaAtivado = true;
-          mensagem = "💦 Reservatório CHEIO! Encerrando enchimento.";
-          ultimoAlerta.cheio = true;
-          ultimoAlerta.vazio = false;
-          ultimoAlerta.meio = false;
-        }
-
-        if (alertaAtivado) {
-          mostrarAlerta(mensagem);
-        }
-
-        // Se o nível sair da zona de alerta, rearma o flag correspondente
         if (nivel > LIMIAR_VAZIO && ultimoAlerta.vazio) ultimoAlerta.vazio = false;
         if ((nivel < LIMIAR_METADE - 20 || nivel > LIMIAR_METADE + 20) && ultimoAlerta.meio) ultimoAlerta.meio = false;
         if (nivel < LIMIAR_CHEIO && ultimoAlerta.cheio) ultimoAlerta.cheio = false;
       }
 
-      // ========== PROCESSAMENTO DOS DADOS MQTT ==========
+      // ========== PROCESSAMENTO ==========
       function processWaterLevelMessage(payload) {
         try {
           const data = JSON.parse(payload);
@@ -583,21 +437,13 @@
             const enchendo = data.enchendo === true;
             const agora = Date.now();
 
-            // Atualiza consumo
             updateConsumoPorTempo(agora, lastFillingState);
-
-            // Atualiza estado anterior e timestamp
             lastFillingState = enchendo;
             lastTimestamp = agora;
 
-            // Atualiza UI do tanque
             updateFillLevel(nivel);
             updateState(enchendo);
-
-            // Adiciona ponto no histórico de nível
             addNivelPoint(agora, nivel);
-
-            // Verifica se gera alerta
             verificarAlertaNivel(nivel);
 
             addLogMessage(`📊 Dados: nível=${nivel} L, enchendo=${enchendo}`);
@@ -616,14 +462,11 @@
         levelLitrosSpan.innerText = Math.round(nivel);
         levelPercentSpan.innerText = Math.round(percent);
         if (percent >= 90)
-          fillBar.style.background =
-            "linear-gradient(145deg, #ef4444, #b91c1c)";
+          fillBar.style.background = "linear-gradient(145deg, #ef4444, #b91c1c)";
         else if (percent >= 70)
-          fillBar.style.background =
-            "linear-gradient(145deg, #f97316, #c2410c)";
+          fillBar.style.background = "linear-gradient(145deg, #f97316, #c2410c)";
         else
-          fillBar.style.background =
-            "linear-gradient(145deg, #3b82f6, #1e40af)";
+          fillBar.style.background = "linear-gradient(145deg, #3b82f6, #1e40af)";
       }
 
       function updateState(enchendo) {
@@ -640,10 +483,7 @@
 
       // ========== MQTT ==========
       function initMqtt() {
-        if (mqttClient)
-          try {
-            mqttClient.end(true);
-          } catch (e) {}
+        if (mqttClient) try { mqttClient.end(true); } catch(e) {}
         const options = {
           clientId: "dashboard_" + Math.random().toString(16).substr(2, 8),
           username: MQTT_USER,
@@ -658,18 +498,13 @@
         mqttClient.on("connect", () => {
           updateConnectionStatus(true);
           mqttClient.subscribe(TOPIC_NIVEL, { qos: 1 }, (err) => {
-            if (err)
-              addLogMessage(`❌ Erro subscrever ${TOPIC_NIVEL}: ${err}`, true);
+            if (err) addLogMessage(`❌ Erro subscrever ${TOPIC_NIVEL}: ${err}`, true);
             else addLogMessage(`📡 Inscrito em ${TOPIC_NIVEL}`);
           });
         });
         mqttClient.on("message", (topic, message) => {
-          if (topic === TOPIC_NIVEL)
-            processWaterLevelMessage(message.toString());
-          else
-            addLogMessage(
-              `📨 Outro tópico: ${topic} -> ${message.toString().substring(0, 60)}`,
-            );
+          if (topic === TOPIC_NIVEL) processWaterLevelMessage(message.toString());
+          else addLogMessage(`📨 Outro tópico: ${topic} -> ${message.toString().substring(0, 60)}`);
         });
         mqttClient.on("error", (err) => {
           updateConnectionStatus(false);
@@ -701,8 +536,7 @@
         }
         const payload = JSON.stringify({ command: command });
         mqttClient.publish(TOPIC_CONTROLE, payload, { qos: 1 }, (err) => {
-          if (err)
-            addLogMessage(`❌ Erro ao enviar ${command}: ${err.message}`, true);
+          if (err) addLogMessage(`❌ Erro ao enviar ${command}: ${err.message}`, true);
           else addLogMessage(`📤 Comando enviado: ${payload}`);
         });
       }
@@ -714,8 +548,7 @@
         logDiv.innerHTML = `[${new Date().toLocaleTimeString()}] ${msg}`;
         logContainer.appendChild(logDiv);
         logDiv.scrollIntoView({ behavior: "smooth", block: "nearest" });
-        while (logContainer.children.length > 40)
-          logContainer.removeChild(logContainer.firstChild);
+        while (logContainer.children.length > 40) logContainer.removeChild(logContainer.firstChild);
       }
 
       // ========== INICIALIZAÇÃO ==========

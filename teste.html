@@ -1,0 +1,738 @@
+<!doctype html>
+<html lang="pt-br">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, user-scalable=yes"
+    />
+    <title>Dashboard Inteligente - Tanque com Gráficos</title>
+    <!-- MQTT.js & Chart.js -->
+    <script src="https://unpkg.com/mqtt@5.0.0/dist/mqtt.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+      * {
+        box-sizing: border-box;
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      }
+      body {
+        background: linear-gradient(135deg, #0b2b44 0%, #1a4d6b 100%);
+        min-height: 100vh;
+        margin: 0;
+        padding: 20px;
+      }
+      .dashboard {
+        max-width: 1400px;
+        margin: 0 auto;
+      }
+      .top-card {
+        background: rgba(255, 255, 255, 0.95);
+        border-radius: 32px;
+        padding: 20px;
+        margin-bottom: 25px;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+      }
+      h1 {
+        font-size: 1.8rem;
+        margin: 0 0 8px 0;
+        color: #0b2b44;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        justify-content: center;
+      }
+      .sub {
+        text-align: center;
+        color: #2c5a7a;
+        margin-bottom: 20px;
+        border-bottom: 1px solid #dee2e6;
+        padding-bottom: 10px;
+      }
+      .connection-status {
+        background: #e2e8f0;
+        border-radius: 40px;
+        padding: 6px 15px;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 0.8rem;
+        font-weight: 500;
+      }
+      .led {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background-color: #f56565;
+        transition: all 0.2s;
+      }
+      .led.green {
+        background-color: #48bb78;
+        box-shadow: 0 0 8px #48bb78;
+      }
+      .tank-container {
+        background: #eef2f7;
+        border-radius: 28px;
+        padding: 15px;
+        margin: 20px 0;
+      }
+      .tank {
+        background-color: #f1f5f9;
+        border: 3px solid #1f6392;
+        border-radius: 24px;
+        height: 280px;
+        position: relative;
+        overflow: hidden;
+      }
+      .fill {
+        background: linear-gradient(145deg, #3b82f6, #1e40af);
+        width: 100%;
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        transition: height 0.3s ease-out;
+        height: 0%;
+        border-radius: 20px 20px 0 0;
+      }
+      .level-info {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 12px;
+        background: #ffffffc9;
+        padding: 10px 18px;
+        border-radius: 60px;
+        font-weight: bold;
+      }
+      .level-value {
+        font-size: 1.6rem;
+        font-weight: 800;
+        color: #0f2b4f;
+      }
+      .state-badge {
+        background: #f1f5f9;
+        padding: 8px 16px;
+        border-radius: 40px;
+        text-align: center;
+        font-size: 0.9rem;
+        margin-top: 10px;
+      }
+      .buttons {
+        display: flex;
+        gap: 12px;
+        margin: 15px 0;
+      }
+      .btn {
+        flex: 1;
+        border: none;
+        color: white;
+        font-size: 1.1rem;
+        font-weight: bold;
+        padding: 12px 0;
+        border-radius: 60px;
+        cursor: pointer;
+        transition: 0.2s;
+      }
+      .stop-btn {
+        background: #e53e3e;
+      }
+      .resume-btn {
+        background: #38a169;
+      }
+      .btn:hover {
+        transform: scale(0.98);
+      }
+      .charts-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+        gap: 25px;
+        margin-top: 20px;
+      }
+      .chart-card {
+        background: rgba(255, 255, 255, 0.95);
+        border-radius: 28px;
+        padding: 15px;
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+      }
+      .chart-card h3 {
+        margin: 0 0 10px 0;
+        color: #1e3c72;
+        font-size: 1.2rem;
+        text-align: center;
+      }
+      canvas {
+        max-height: 250px;
+        width: 100%;
+      }
+      .log-area {
+        background: #1e293b;
+        color: #cbd5e6;
+        border-radius: 20px;
+        padding: 12px 16px;
+        font-family: monospace;
+        font-size: 0.75rem;
+        margin-top: 20px;
+        max-height: 130px;
+        overflow-y: auto;
+      }
+      /* Estilo para o alerta temporário */
+      .toast-alert {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        background: #f97316;
+        color: white;
+        padding: 12px 20px;
+        border-radius: 40px;
+        font-weight: bold;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        z-index: 1000;
+        animation: fadeInOut 5s ease forwards;
+      }
+      @keyframes fadeInOut {
+        0% { opacity: 0; transform: translateY(20px); }
+        10% { opacity: 1; transform: translateY(0); }
+        90% { opacity: 1; transform: translateY(0); }
+        100% { opacity: 0; transform: translateY(20px); visibility: hidden; }
+      }
+      footer {
+        text-align: center;
+        font-size: 0.7rem;
+        color: #6c86a3;
+        margin-top: 20px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="dashboard">
+      <div class="top-card">
+        <h1>💧 Monitor Inteligente <small>ESP32 + HiveMQ</small></h1>
+        <div class="sub">Controle de enchimento e análise de consumo</div>
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+          "
+        >
+          <div class="connection-status">
+            <span class="led" id="statusLed"></span>
+            <span id="mqttStatusText">Desconectado</span>
+          </div>
+          <div
+            style="
+              font-size: 12px;
+              background: #eef2ff;
+              padding: 4px 12px;
+              border-radius: 20px;
+            "
+          >
+            📡 tópico: <strong>uepa/dupla1/water_level</strong>
+          </div>
+        </div>
+
+        <div class="tank-container">
+          <div class="tank"><div class="fill" id="fillBar"></div></div>
+          <div class="level-info">
+            <span>💧 Nível atual</span>
+            <span class="level-value">
+              <span id="levelLitros">0</span> L &nbsp;|&nbsp;
+              <span id="levelPercent">0</span>%
+            </span>
+          </div>
+          <div class="state-badge" id="stateBadge">
+            🟢 Estado: Aguardando...
+          </div>
+        </div>
+
+        <div class="buttons">
+          <button class="btn stop-btn" id="stopButton">
+            🛑 PARAR ENCHIMENTO
+          </button>
+          <button class="btn resume-btn" id="resumeButton">
+            ▶️ RETOMAR ENCHIMENTO
+          </button>
+        </div>
+        <p style="font-size: 12px; text-align: center; margin-top: -5px">
+          ⚙️ Comandos: <code>{"command": "stop_fill"}</code> ou
+          <code>{"command": "resume_fill"}</code>
+        </p>
+      </div>
+
+      <div class="charts-grid">
+        <div class="chart-card">
+          <h3>💰 Consumo de Energia (R$) - Últimas 24h</h3>
+          <canvas id="costChart" width="400" height="200"></canvas>
+        </div>
+        <div class="chart-card">
+          <h3>📊 Comparativo Mensal (R$)</h3>
+          <canvas id="monthlyChart" width="400" height="200"></canvas>
+        </div>
+        <div class="chart-card">
+          <h3>📈 Histórico do Nível (L) - Últimas 24h</h3>
+          <canvas id="levelHistoryChart" width="400" height="200"></canvas>
+        </div>
+      </div>
+
+      <div class="log-area">
+        <div class="log-title">📡 Eventos e comandos</div>
+        <div id="logMessages">
+          <div class="log-message">🟡 Inicializando dashboard...</div>
+        </div>
+      </div>
+      <footer>
+        🔌 Broker HiveMQ Cloud (TLS) – Dados em tempo real | Bomba: 1.5 kW |
+        Tarifa: R$ 0,80/kWh
+      </footer>
+    </div>
+
+    <script>
+      // ========== CONFIGURAÇÕES ==========
+      const MQTT_BROKER =
+        "wss://d075579b224c4899825f05c9f9a1ec5a.s1.eu.hivemq.cloud:8884/mqtt";
+      const MQTT_USER = "teste123";
+      const MQTT_PASSWORD = "Eduardo123";
+      const TOPIC_NIVEL = "uepa/dupla1/water_level";
+      const TOPIC_CONTROLE = "uepa/dupla1/control";
+      const CAPACIDADE_MAX = 500.0; // litros
+      const POTENCIA_BOMBA_KW = 1.5; // kW
+      const TARIFA_KWH = 0.8; // R$/kWh
+
+      // Limiares para alertas
+      const LIMIAR_VAZIO = 80;      // 80 L (16% da capacidade)
+      const LIMIAR_METADE = 250;    // 250 L (50%)
+      const LIMIAR_CHEIO = 450;     // 450 L (90%)
+
+      // ========== VARIÁVEIS GLOBAIS ==========
+      let mqttClient = null;
+      let isConnected = false;
+      let lastTimestamp = Date.now();
+      let lastFillingState = false;
+      let consumoAcumuladoDia = 0.0; // R$ acumulado nas últimas 24h (rolling)
+      let historicoConsumo = []; // { timestamp, valor }
+      let historicoNivel = []; // { timestamp, nivel }
+      const MAX_HISTORICO = 100; // pontos para gráficos
+
+      // Dados fixos para comparação mensal (valores em R$)
+      let consumoMensal = {
+        atual: 0.0,
+        passado: 248.5,
+        retrasado: 212.3,
+      };
+
+      // Controle de alertas para evitar repetição
+      let ultimoAlerta = {
+        vazio: false,
+        meio: false,
+        cheio: false
+      };
+      let notificacaoPermitida = false;
+
+      // ========== ELEMENTOS DOM ==========
+      const fillBar = document.getElementById("fillBar");
+      const levelLitrosSpan = document.getElementById("levelLitros");
+      const levelPercentSpan = document.getElementById("levelPercent");
+      const stateBadge = document.getElementById("stateBadge");
+      const stopButton = document.getElementById("stopButton");
+      const resumeButton = document.getElementById("resumeButton");
+      const mqttStatusText = document.getElementById("mqttStatusText");
+      const statusLed = document.getElementById("statusLed");
+      const logContainer = document.getElementById("logMessages");
+
+      // ========== GRÁFICOS ==========
+      let costChart, monthlyChart, levelHistoryChart;
+
+      function initCharts() {
+        // Gráfico de consumo (linha)
+        const ctxCost = document.getElementById("costChart").getContext("2d");
+        costChart = new Chart(ctxCost, {
+          type: "line",
+          data: {
+            labels: [],
+            datasets: [
+              {
+                label: "Consumo Acumulado (R$)",
+                data: [],
+                borderColor: "#e53e3e",
+                backgroundColor: "rgba(229,62,62,0.1)",
+                fill: true,
+                tension: 0.3,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            scales: {
+              y: { beginAtZero: true, title: { display: true, text: "R$" } },
+            },
+          },
+        });
+        // Gráfico mensal (barras)
+        const ctxMonthly = document
+          .getElementById("monthlyChart")
+          .getContext("2d");
+        monthlyChart = new Chart(ctxMonthly, {
+          type: "bar",
+          data: {
+            labels: ["Mês Atual", "Mês Passado", "Mês Retrasado"],
+            datasets: [
+              {
+                label: "Custo (R$)",
+                data: [0, consumoMensal.passado, consumoMensal.retrasado],
+                backgroundColor: ["#38a169", "#4299e1", "#ed8936"],
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            scales: {
+              y: { beginAtZero: true, title: { display: true, text: "R$" } },
+            },
+          },
+        });
+        // Gráfico de nível histórico (linha)
+        const ctxLevel = document
+          .getElementById("levelHistoryChart")
+          .getContext("2d");
+        levelHistoryChart = new Chart(ctxLevel, {
+          type: "line",
+          data: {
+            labels: [],
+            datasets: [
+              {
+                label: "Nível (L)",
+                data: [],
+                borderColor: "#3b82f6",
+                backgroundColor: "rgba(59,130,246,0.1)",
+                fill: true,
+                tension: 0.2,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            scales: {
+              y: {
+                min: 0,
+                max: CAPACIDADE_MAX,
+                title: { display: true, text: "Litros" },
+              },
+            },
+          },
+        });
+      }
+
+      // Atualiza os dados do gráfico mensal (reflete o consumo atual)
+      function updateMonthlyChart() {
+        monthlyChart.data.datasets[0].data = [
+          consumoMensal.atual,
+          consumoMensal.passado,
+          consumoMensal.retrasado,
+        ];
+        monthlyChart.update();
+      }
+
+      // Adiciona um ponto ao histórico de consumo (acumulado) e mantém apenas últimas 24h
+      function addConsumoPoint(timestamp, valorAcumulado) {
+        historicoConsumo.push({ timestamp, valor: valorAcumulado });
+        const agora = Date.now();
+        historicoConsumo = historicoConsumo.filter(
+          (p) => agora - p.timestamp <= 24 * 3600 * 1000,
+        );
+        if (historicoConsumo.length > MAX_HISTORICO)
+          historicoConsumo = historicoConsumo.slice(-MAX_HISTORICO);
+        costChart.data.labels = historicoConsumo.map((p) =>
+          new Date(p.timestamp).toLocaleTimeString(),
+        );
+        costChart.data.datasets[0].data = historicoConsumo.map((p) => p.valor);
+        costChart.update();
+      }
+
+      // Adiciona um ponto ao histórico de nível (últimas 24h)
+      function addNivelPoint(timestamp, nivel) {
+        historicoNivel.push({ timestamp, nivel });
+        const agora = Date.now();
+        historicoNivel = historicoNivel.filter(
+          (p) => agora - p.timestamp <= 24 * 3600 * 1000,
+        );
+        if (historicoNivel.length > MAX_HISTORICO)
+          historicoNivel = historicoNivel.slice(-MAX_HISTORICO);
+        levelHistoryChart.data.labels = historicoNivel.map((p) =>
+          new Date(p.timestamp).toLocaleTimeString(),
+        );
+        levelHistoryChart.data.datasets[0].data = historicoNivel.map(
+          (p) => p.nivel,
+        );
+        levelHistoryChart.update();
+      }
+
+      // Atualiza o consumo com base no tempo em que a bomba ficou ligada
+      function updateConsumoPorTempo(agora, estavaEnchendo) {
+        let custo = 0;
+        if (estavaEnchendo) {
+          const deltaSegundos = (agora - lastTimestamp) / 1000;
+          if (deltaSegundos > 0) {
+            const energia_kWh = POTENCIA_BOMBA_KW * (deltaSegundos / 3600);
+            custo = energia_kWh * TARIFA_KWH;
+            consumoAcumuladoDia += custo;
+            consumoMensal.atual += custo;
+            addLogMessage(
+              `⚡ Consumo: +R$ ${custo.toFixed(3)} (total dia: R$ ${consumoAcumuladoDia.toFixed(2)})`,
+            );
+          }
+        }
+        addConsumoPoint(agora, consumoAcumuladoDia);
+        updateMonthlyChart();
+      }
+
+      // ========== ALERTAS ==========
+      function solicitarPermissaoNotificacao() {
+        if ("Notification" in window && Notification.permission !== "granted" && Notification.permission !== "denied") {
+          Notification.requestPermission().then(perm => {
+            notificacaoPermitida = (perm === "granted");
+          });
+        } else if (Notification.permission === "granted") {
+          notificacaoPermitida = true;
+        }
+      }
+
+      function tocarSom() {
+        // Cria um beep curto usando Web Audio
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        oscillator.connect(gain);
+        gain.connect(audioCtx.destination);
+        oscillator.type = "sine";
+        oscillator.frequency.value = 880; // tom agudo
+        gain.gain.value = 0.2;
+        oscillator.start();
+        gain.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + 0.5);
+        oscillator.stop(audioCtx.currentTime + 0.5);
+        // Nota: o AudioContext pode estar suspenso inicialmente; se não houver som, chamamos resume
+        if (audioCtx.state === "suspended") audioCtx.resume();
+      }
+
+      function mostrarAlerta(mensagem, tipo) {
+        // Toast temporário
+        const toast = document.createElement("div");
+        toast.className = "toast-alert";
+        toast.textContent = mensagem;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 5000);
+
+        // Notificação do navegador
+        if (notificacaoPermitida) {
+          new Notification("🚨 Alerta do Reservatório", { body: mensagem, icon: "https://cdn-icons-png.flaticon.com/512/190/190784.png" });
+        }
+
+        // Som
+        tocarSom();
+
+        // Log também
+        addLogMessage(`⚠️ ALERTA: ${mensagem}`);
+      }
+
+      function verificarAlertaNivel(nivel) {
+        let alertaAtivado = false;
+        let mensagem = "";
+
+        // Verifica quase vazio (≤ LIMIAR_VAZIO)
+        if (nivel <= LIMIAR_VAZIO && !ultimoAlerta.vazio) {
+          alertaAtivado = true;
+          mensagem = "🔻 Nível CRÍTICO! Reservatório quase vazio!";
+          ultimoAlerta.vazio = true;
+          ultimoAlerta.meio = false;   // reseta meio e cheio porque cruzou o limite
+          ultimoAlerta.cheio = false;
+        }
+        // Verifica meio cheio (entre LIMIAR_VAZIO+1 e LIMIAR_METADE? melhor usar um intervalo: 45%-55%)
+        else if (nivel >= LIMIAR_METADE - 20 && nivel <= LIMIAR_METADE + 20 && !ultimoAlerta.meio && nivel > LIMIAR_VAZIO) {
+          alertaAtivado = true;
+          mensagem = "⚠️ Reservatório está na metade da capacidade!";
+          ultimoAlerta.meio = true;
+          ultimoAlerta.vazio = false;
+          ultimoAlerta.cheio = false;
+        }
+        // Verifica cheio (≥ LIMIAR_CHEIO)
+        else if (nivel >= LIMIAR_CHEIO && !ultimoAlerta.cheio) {
+          alertaAtivado = true;
+          mensagem = "💦 Reservatório CHEIO! Encerrando enchimento.";
+          ultimoAlerta.cheio = true;
+          ultimoAlerta.vazio = false;
+          ultimoAlerta.meio = false;
+        }
+
+        if (alertaAtivado) {
+          mostrarAlerta(mensagem);
+        }
+
+        // Se o nível sair da zona de alerta, rearma o flag correspondente
+        if (nivel > LIMIAR_VAZIO && ultimoAlerta.vazio) ultimoAlerta.vazio = false;
+        if ((nivel < LIMIAR_METADE - 20 || nivel > LIMIAR_METADE + 20) && ultimoAlerta.meio) ultimoAlerta.meio = false;
+        if (nivel < LIMIAR_CHEIO && ultimoAlerta.cheio) ultimoAlerta.cheio = false;
+      }
+
+      // ========== PROCESSAMENTO DOS DADOS MQTT ==========
+      function processWaterLevelMessage(payload) {
+        try {
+          const data = JSON.parse(payload);
+          if (typeof data.nivel !== "undefined") {
+            const nivel = parseFloat(data.nivel);
+            const enchendo = data.enchendo === true;
+            const agora = Date.now();
+
+            // Atualiza consumo
+            updateConsumoPorTempo(agora, lastFillingState);
+
+            // Atualiza estado anterior e timestamp
+            lastFillingState = enchendo;
+            lastTimestamp = agora;
+
+            // Atualiza UI do tanque
+            updateFillLevel(nivel);
+            updateState(enchendo);
+
+            // Adiciona ponto no histórico de nível
+            addNivelPoint(agora, nivel);
+
+            // Verifica se gera alerta
+            verificarAlertaNivel(nivel);
+
+            addLogMessage(`📊 Dados: nível=${nivel} L, enchendo=${enchendo}`);
+          } else {
+            addLogMessage(`⚠️ JSON sem campo 'nivel': ${payload}`, false);
+          }
+        } catch (e) {
+          addLogMessage(`❌ Erro ao parsear JSON: ${e.message}`, true);
+        }
+      }
+
+      function updateFillLevel(litros) {
+        let nivel = Math.min(CAPACIDADE_MAX, Math.max(0, litros));
+        let percent = (nivel / CAPACIDADE_MAX) * 100;
+        fillBar.style.height = percent + "%";
+        levelLitrosSpan.innerText = Math.round(nivel);
+        levelPercentSpan.innerText = Math.round(percent);
+        if (percent >= 90)
+          fillBar.style.background =
+            "linear-gradient(145deg, #ef4444, #b91c1c)";
+        else if (percent >= 70)
+          fillBar.style.background =
+            "linear-gradient(145deg, #f97316, #c2410c)";
+        else
+          fillBar.style.background =
+            "linear-gradient(145deg, #3b82f6, #1e40af)";
+      }
+
+      function updateState(enchendo) {
+        if (enchendo) {
+          stateBadge.innerHTML = "🟢 Estado: ENCHENDO";
+          stateBadge.style.background = "#c6f6d5";
+          stateBadge.style.color = "#22543d";
+        } else {
+          stateBadge.innerHTML = "🔴 Estado: DRENANDO (consumindo)";
+          stateBadge.style.background = "#fed7d7";
+          stateBadge.style.color = "#742a2a";
+        }
+      }
+
+      // ========== MQTT ==========
+      function initMqtt() {
+        if (mqttClient)
+          try {
+            mqttClient.end(true);
+          } catch (e) {}
+        const options = {
+          clientId: "dashboard_" + Math.random().toString(16).substr(2, 8),
+          username: MQTT_USER,
+          password: MQTT_PASSWORD,
+          clean: true,
+          connectTimeout: 10000,
+          keepalive: 60,
+          reconnectPeriod: 5000,
+          rejectUnauthorized: false,
+        };
+        mqttClient = mqtt.connect(MQTT_BROKER, options);
+        mqttClient.on("connect", () => {
+          updateConnectionStatus(true);
+          mqttClient.subscribe(TOPIC_NIVEL, { qos: 1 }, (err) => {
+            if (err)
+              addLogMessage(`❌ Erro subscrever ${TOPIC_NIVEL}: ${err}`, true);
+            else addLogMessage(`📡 Inscrito em ${TOPIC_NIVEL}`);
+          });
+        });
+        mqttClient.on("message", (topic, message) => {
+          if (topic === TOPIC_NIVEL)
+            processWaterLevelMessage(message.toString());
+          else
+            addLogMessage(
+              `📨 Outro tópico: ${topic} -> ${message.toString().substring(0, 60)}`,
+            );
+        });
+        mqttClient.on("error", (err) => {
+          updateConnectionStatus(false);
+          addLogMessage(`❌ MQTT error: ${err.message}`, true);
+        });
+        mqttClient.on("close", () => updateConnectionStatus(false));
+        mqttClient.on("reconnect", () => addLogMessage("🔄 Reconectando..."));
+      }
+
+      function updateConnectionStatus(connected) {
+        isConnected = connected;
+        if (connected) {
+          mqttStatusText.innerText = "Conectado ao HiveMQ";
+          statusLed.classList.add("green");
+          stopButton.disabled = false;
+          resumeButton.disabled = false;
+        } else {
+          mqttStatusText.innerText = "Desconectado";
+          statusLed.classList.remove("green");
+          stopButton.disabled = true;
+          resumeButton.disabled = true;
+        }
+      }
+
+      function sendCommand(command) {
+        if (!mqttClient || !isConnected) {
+          addLogMessage("⚠️ Sem conexão MQTT", true);
+          return;
+        }
+        const payload = JSON.stringify({ command: command });
+        mqttClient.publish(TOPIC_CONTROLE, payload, { qos: 1 }, (err) => {
+          if (err)
+            addLogMessage(`❌ Erro ao enviar ${command}: ${err.message}`, true);
+          else addLogMessage(`📤 Comando enviado: ${payload}`);
+        });
+      }
+
+      function addLogMessage(msg, isError = false) {
+        const logDiv = document.createElement("div");
+        logDiv.className = "log-message";
+        logDiv.style.color = isError ? "#f87171" : "#a5f3c3";
+        logDiv.innerHTML = `[${new Date().toLocaleTimeString()}] ${msg}`;
+        logContainer.appendChild(logDiv);
+        logDiv.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        while (logContainer.children.length > 40)
+          logContainer.removeChild(logContainer.firstChild);
+      }
+
+      // ========== INICIALIZAÇÃO ==========
+      window.addEventListener("load", () => {
+        initCharts();
+        initMqtt();
+        lastTimestamp = Date.now();
+        lastFillingState = false;
+        addConsumoPoint(Date.now(), 0);
+        addLogMessage("Dashboard pronto. Aguardando dados...");
+        solicitarPermissaoNotificacao();
+      });
+      stopButton.addEventListener("click", () => sendCommand("stop_fill"));
+      resumeButton.addEventListener("click", () => sendCommand("resume_fill"));
+      window.addEventListener("beforeunload", () => {
+        if (mqttClient && isConnected) mqttClient.end(true);
+      });
+    </script>
+  </body>
+</html>
